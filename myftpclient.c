@@ -30,16 +30,19 @@ char* Ip;
 char* Port;
 char* UserName;
 char* Password;
+char  UserNamePassword[65];
 char* token;
 enum STATES StateNum;
 bool InvalidInput;
 
-void OpenConnection(in_addr_t ip, unsigned short port){
-    int buf;
-	int fd;
-	struct sockaddr_in addr;
-	unsigned int addrlen = sizeof(struct sockaddr_in);
-	struct message_s message;
+int buf;
+int fd;
+unsigned int count;
+struct sockaddr_in addr;
+unsigned int addrlen = sizeof(struct sockaddr_in);
+struct message_s message;
+
+int OpenConnection(in_addr_t ip, unsigned short port){
 
 	message.protocol[0] = 0xe3;
 	message.protocol[1] = 'm';
@@ -57,7 +60,7 @@ void OpenConnection(in_addr_t ip, unsigned short port){
 	if(fd == -1)
 	{
 		perror("socket()");
-		exit(1);
+		return 0;
 	}
 
 
@@ -68,11 +71,77 @@ void OpenConnection(in_addr_t ip, unsigned short port){
 
 	if( connect(fd, (struct sockaddr *) &addr, addrlen) == -1 )		// connect to the destintation
 	{
-		perror("connect()");
-		exit(1);
+		printf("Server connection rejected.\n");
+		return 0;
+	}
+	else {
+        message.length = htonl(message.length);
+        //printf("%d",sizeof(unsigned int) );
+
+        write(fd, &message, sizeof(message));
+
+        count = read(fd, &message, sizeof(message));
+
+        message.length = ntohl(message.length);
+
+        /*Check the message*/
+        if (count = 12)
+            printf("Server connection accepted.\n");
+        else
+            printf("Server connection rejected.\n");
+        //printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
+        StateNum++;
+
+        return 1;
 	}
 
+
+}
+
+void Authentication(){
+
+    int i = 0;
+
+    message.protocol[0] = 0xe3;
+	message.protocol[1] = 'm';
+	message.protocol[2] = 'y';
+	message.protocol[3] = 'f';
+	message.protocol[4] = 't';
+	message.protocol[5] = 'p';
+	message.type = 0xA3;
+	message.status = 0x00;
+	message.length = 12+strlen(UserName)+strlen(Password)+2;
+
+    message.length = htonl(message.length);
+	//printf("%d",sizeof(unsigned int) );
+
+    for (i= 0 ; i<strlen(UserName);i++){
+        UserNamePassword[i] = *(UserName+i);
+    }
+
+    i++;
+    UserNamePassword[i] = 0x32;
+
+    for (i = 0; i<strlen(Password); i++){
+        UserNamePassword[strlen(UserName)+1+i] = *(Password+i);   }
+
+
+
 	write(fd, &message, sizeof(message));
+	write(fd, &UserNamePassword, sizeof(UserNamePassword));
+
+    count = read(fd, &message, sizeof(message));
+    message.length = ntohl(message.length);
+
+    if (message.status == 1){
+        printf("Authentication granted.\n");
+        StateNum++;
+    }
+    else{
+        printf("ERROR: Authentication rejected. Connection closed.\n");
+        StateNum--;
+    }
+
 }
 
 void SyntaxError(){
@@ -138,14 +207,25 @@ int main(){
                 UserName = strtok(NULL," ");
                 Password = strtok(NULL," ");
 
-                if (strcmp(Command, "auth") != 0)
+                if (Command != NULL){
+                    if (strcmp(Command, "auth") != 0)
+                        InvalidInput = true;
+                }
+                else
                     InvalidInput = true;
 
-                if ((ip = inet_addr(Ip)) == -1)
+                if (UserName == NULL)
                     InvalidInput = true;
 
-                if ( (port = atoi(Port)) <= 0)
+                if (Password == NULL)
                     InvalidInput = true;
+
+
+//                if ((ip = inet_addr(Ip)) == -1)
+//                    InvalidInput = true;
+//
+//                if ( (port = atoi(Port)) <= 0)
+//                    InvalidInput = true;
                 break;
             }
             case Authed :{
@@ -156,7 +236,15 @@ int main(){
         if (InvalidInput)
             SyntaxError();
         else{
-            OpenConnection(ip,port);
+            switch (StateNum){
+            case Idle:
+                OpenConnection(ip,port);
+            break;
+            case Opened:
+                Authentication();
+            break;
+            }
+
         }
 
 
