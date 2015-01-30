@@ -1,8 +1,8 @@
 CC = gcc
 all: myftpclient myftpserver
 myftpclient: myftpclient.c
-		$(CC) -o $@ $< 
+		$(CC) -g -o $@ $< 
 myftpserver: myftpserver.c
-		$(CC) -o $@ $<
+		$(CC) -g -o $@ $<
 clean:
 	rm myftpclient myftpserver
