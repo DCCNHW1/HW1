@@ -141,6 +141,8 @@ void Authentication(){
         printf("ERROR: Authentication rejected. Connection closed.\n");
         StateNum--;
     }
+	
+	memset(UserNamePassword, 0, sizeof(UserNamePassword));
 
 }
 
