@@ -138,6 +138,7 @@ void Authentication(){
         printf("ERROR: Authentication rejected. Connection closed.\n");
         StateNum--;
     }
+	
 
 }
 
@@ -397,18 +398,17 @@ void Quit(){
 
     message.length = htonl(message.length);
 
-    write(fd, &message, sizeof(message));
-
-    count = read(fd, &message, sizeof(message));
-    message.length = ntohl(message.length);
+    send(fd, &message, sizeof(message), 0);
+    count = recv(fd, &message, sizeof(message), 0);
+	
+	message.length = ntohl(message.length);
 
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
     printf("Thank you.\n");
 
-    close(fd);
-
-    exit(1);
+	close(fd);
+	exit(0);
 }
 
 void SyntaxError(){
@@ -533,6 +533,7 @@ int main(){
 
                 if (strcmp(Command, "quit") ==0)
                     Quit();
+	
             }
 
             break;

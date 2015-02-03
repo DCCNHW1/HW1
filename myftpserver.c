@@ -17,6 +17,8 @@ typedef int bool;
 #define true 1
 #define false 0
 
+#define MAX_N 5
+
 enum STATES {Idle, Opened, Authed};
 
 struct message_s {
@@ -39,6 +41,51 @@ struct sockaddr_in addr, tmp_addr;
 unsigned int addrlen = sizeof(struct sockaddr_in);
 int reuseaddr = 1;
 socklen_t reuseaddr_len;
+
+pthread_t connections[MAX_N];
+int connection_count;
+
+//Function Prototypes
+unsigned int ReadRecords();
+void Initialisation(unsigned short port);
+int OpenConnection();
+bool Authentication(int accept_fd);
+void LS(int accept_fd);
+void Get(int accept_fd, unsigned int length);
+void Put(int accept_fd, unsigned int length);
+void Quit(int accept_fd);
+void MainLoop(int accept_fd);
+void *Client(void *accept_fdp);
+
+int main(int argc, char **argv){
+
+	unsigned short port;
+    bool match = false;
+	int accept_fd;
+
+    if(argc != 2)
+	{
+		fprintf(stderr, "Usage: %s [port]\n", argv[0]);
+		exit(1);
+	}
+
+	NumRecord = ReadRecords();
+
+	port = atoi(argv[1]);
+
+	Initialisation(port);
+
+    while (1){
+        accept_fd = OpenConnection();
+        /*match = Authentication(accept_fd);
+        if (match)
+            MainLoop(accept_fd);*/
+    }
+	
+	close(fd);
+	
+	return 0;
+}
 
 unsigned int ReadRecords(){
     FILE* fp = fopen("access.txt","r");
@@ -64,7 +111,9 @@ void Initialisation(unsigned short port){
 //	struct message_s message;
 
 	fd = socket(AF_INET, SOCK_STREAM, 0);		// Create a TCP Socket
-
+	
+	connection_count = 0;
+	
 	if(fd == -1)
 	{
 		perror("socket()");
@@ -104,35 +153,17 @@ int OpenConnection()
 	struct message_s message;
 
 	while (1){
+		printf("Before accept\n");
         if( (accept_fd = accept(fd, (struct sockaddr *) &tmp_addr, &addrlen)) == -1)
 		{
 			perror("accept()");
 			exit(1);
 		}
-
-		count = read(accept_fd, &message, sizeof(message));
-
-        message.length = ntohl(message.length);
-
-        /*Check the message*/
-
-		printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
-
-        message.protocol[0] = 0xe3;
-        message.protocol[1] = 'm';
-        message.protocol[2] = 'y';
-        message.protocol[3] = 'f';
-        message.protocol[4] = 't';
-        message.protocol[5] = 'p';
-        message.type = 0xA2;
-        message.status = 0x00;
-        message.length = 12;
-
-		message.length = htonl(message.length);
-
-		write(accept_fd, &message, sizeof(message));
-
-        //close(accept_fd);
+		if (connection_count < MAX_N){
+			pthread_create(&connections[connection_count], NULL, Client, (void *) &accept_fd);
+			connection_count++;
+		}
+		
         return accept_fd;
 	}
 }
@@ -219,7 +250,7 @@ void LS(int accept_fd){
     strcpy(Payload,"");
 
     ReadBytes = 0;
-    WroteBytes =0;
+    WroteBytes = 0;
 
     if ((dir = opendir("./filedir")) == NULL)
     {
@@ -490,9 +521,9 @@ void Quit(int accept_fd){
 	message.length = 12;
 
     message.length = htonl(message.length);
-
-    write(fd, &message, sizeof(message));
-
+	
+    send(fd, &message, sizeof(message), MSG_NOSIGNAL);
+	close(accept_fd);
 }
 
 void MainLoop(int accept_fd){
@@ -510,7 +541,7 @@ void MainLoop(int accept_fd){
     while (1){
         strcpy(Payload,"");
         ReadBytes = 0;
-        WroteBytes =0;
+        WroteBytes = 0;
 
         count = read(accept_fd, &message, sizeof(message));
         message.length = ntohl(message.length);
@@ -535,45 +566,59 @@ void MainLoop(int accept_fd){
             case 0xAB :{
                 Quit(accept_fd);
                 EndThread = true;
-                close(accept_fd);           //Close the connection.
+				//pthread_exit();//Close the connection.
             }
             break;
         }
 
         if (EndThread)
-            break;
+			break;
 
     }
 
     free(Payload);
-
+	
+	pthread_exit();
     /*Maybe you should end the thread at here.*/
 
 }
 
-int main(int argc, char **argv){
+void *Client(void *accept_fdp){
+	int count ;
+    int accept_fd;
+	bool match;
+	
+	struct message_s message;
+	
+	if (accept_fdp == NULL)
+		exit(0);
+		
+	accept_fd = *((int *)accept_fdp);
+	printf("Accept_fd = %d\n", accept_fd);
+	count = read(accept_fd, &message, sizeof(message));
 
-	unsigned short port;
-    bool match = false;
-	int accept_fd;
+    message.length = ntohl(message.length);
 
-    if(argc != 2)
-	{
-		fprintf(stderr, "Usage: %s [port]\n", argv[0]);
-		exit(1);
-	}
+    /*Check the message*/
 
-	NumRecord = ReadRecords();
+	printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
-	port = atoi(argv[1]);
+    message.protocol[0] = 0xe3;
+    message.protocol[1] = 'm';
+    message.protocol[2] = 'y';
+    message.protocol[3] = 'f';
+    message.protocol[4] = 't';
+    message.protocol[5] = 'p';
+    message.type = 0xA2;
+    message.status = 0x00;
+    message.length = 12;
+	message.length = htonl(message.length);
 
-	Initialisation(port);
-
-    while (1){
-        accept_fd = OpenConnection();
-        match = Authentication(accept_fd);
-        if (match)
-            MainLoop(accept_fd);
-    }
-
+	write(accept_fd, &message, sizeof(message));
+	
+	match = Authentication(accept_fd);
+    if (match)
+		MainLoop(accept_fd);
+		
+	return;
 }
