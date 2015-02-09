@@ -11,14 +11,13 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <dirent.h>
-//#include <limits.h>
+#include <limits.h>
 
 typedef int bool;
 #define true 1
 #define false 0
 
 #define MAX_N 5
-#define INT_MAX 32767
 
 #define OPEN_CONN_REQUEST 0xA1
 #define OPEN_CONN_REPLY 0xA2
