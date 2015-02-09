@@ -80,7 +80,7 @@ bool IsValid(struct message_s message, unsigned int msg_type){
 		printf("Invalid Message: invalid message length field. Closing..\n");
 		return false;
 	}
-	if ( ((message.type == OPEN_CONN_REPLY) || (message.type == AUTH_REPLY) || (message.type == GET_REPLY) || 
+	if ( ((message.type == OPEN_CONN_REPLY) || (message.type == AUTH_REPLY) || (message.type == GET_REPLY) ||
 	(message.type == PUT_REPLY) || (message.type == QUIT_REPLY) )
 	&& (message.length != 12)){
 		printf("Invalid Message: invalid message length field. Closing..\n");
@@ -133,9 +133,9 @@ int OpenConnection(in_addr_t ip, unsigned short port){
 			close(fd);
 			exit(1);
 		}
-		
+
 		message.length = ntohl(message.length);
-		
+
 		if (!IsValid(message, OPEN_CONN_REPLY)) {
 			close(fd);
 			exit(1);
@@ -187,14 +187,14 @@ void Authentication(){
 			close(fd);
 			exit(1);
 	}
-    
+
 	message.length = ntohl(message.length);
-	
+
 	if (!IsValid(message, AUTH_REPLY)) {
 			close(fd);
 			exit(1);
 	}
-	
+
     if (message.status == 1){
         printf("Authentication granted.\n");
         StateNum++;
@@ -203,7 +203,7 @@ void Authentication(){
         printf("ERROR: Authentication rejected. Connection closed.\n");
         StateNum--;
     }
-	
+
 
 }
 
@@ -234,9 +234,9 @@ void LS(char *Command, char *FileName){
 			close(fd);
 			exit(1);
 		}
-		
+
 	message.length = ntohl(message.length);
-		
+
 	if (!IsValid(message, LIST_REPLY)) {
 		close(fd);
 		exit(1);
@@ -299,9 +299,9 @@ void Get(char *Command, char *FileName){
 			close(fd);
 			exit(1);
 	}
-		
+
 	message.length = ntohl(message.length);
-		
+
 	if (!IsValid(message, GET_REPLY)) {
 		close(fd);
 		exit(1);
@@ -311,15 +311,15 @@ void Get(char *Command, char *FileName){
 
     if (message.status){
         count = read(fd, &message, sizeof(message));
-		
+
         if (count < 1) {
 			printf("Error. Null message. Closing..\n");
 			close(fd);
 			exit(1);
 		}
-		
+
 		message.length = ntohl(message.length);
-		
+
 		if (!IsValid(message, FILE_DATA)) {
 			close(fd);
 			exit(1);
@@ -336,13 +336,13 @@ void Get(char *Command, char *FileName){
 
         while (ReadBytes < TotalBytes){
             count = read(fd, Payload+ReadBytes, TotalBytes-ReadBytes);
-			
+
 			if (count < 1) {
 				printf("Error. Null message. Closing..\n");
 				close(fd);
 				exit(1);
 			}
-			
+
             ReadBytes +=count;
         }
         message.length = ntohl(message.length);
@@ -457,14 +457,14 @@ void Put(char *Command, char *FileName){
 				close(fd);
 				exit(1);
 			}
-		
+
 			message.length = ntohl(message.length);
-		
+
 			if (!IsValid(message, PUT_REPLY)) {
 				close(fd);
 				exit(1);
 			}
-			
+
             message.protocol[0] = 0xe3;
             message.protocol[1] = 'm';
             message.protocol[2] = 'y';
@@ -518,15 +518,15 @@ void Quit(){
 
     send(fd, &message, sizeof(message), 0);
     count = recv(fd, &message, sizeof(message), 0);
-	
+
 	if (count < 1) {
 		printf("Error. Null message. Closing..\n");
 		close(fd);
 		exit(1);
 	}
-		
+
 	message.length = ntohl(message.length);
-		
+
 	if (!IsValid(message, QUIT_REPLY)) {
 		close(fd);
 		exit(1);
@@ -662,7 +662,7 @@ int main(){
 
                 if (strcmp(Command, "quit") ==0)
                     Quit();
-	
+
             }
 
             break;
@@ -673,3 +673,4 @@ int main(){
     }
 
 }
+

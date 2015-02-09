@@ -77,13 +77,13 @@ int main(int argc, char **argv){
 	unsigned short port;
     bool match = false;
 	int accept_fd;
-	
+
     if(argc != 2)
 	{
 		fprintf(stderr, "Usage: %s [port]\n", argv[0]);
 		exit(1);
 	}
-	
+
 	NumRecord = ReadRecords();
 
 	port = atoi(argv[1]);
@@ -96,20 +96,20 @@ int main(int argc, char **argv){
         if (match)
             MainLoop(accept_fd);*/
     }
-	
+
 	close(fd);
-	
+
 	return 0;
 }
 
 unsigned int ReadRecords(){
     FILE* fp = fopen("access.txt","r");
-	
+
 	if (fp == NULL) {
 		perror("Fail to open file");
 		exit(1);
 	}
-	
+
     unsigned int i = 0;
     int c ;
 
@@ -131,9 +131,9 @@ void Initialisation(unsigned short port){
 //	struct message_s message;
 
 	fd = socket(AF_INET, SOCK_STREAM, 0);		// Create a TCP Socket
-	
+
 	connection_count = 0;
-	
+
 	if(fd == -1)
 	{
 		perror("socket()");
@@ -186,7 +186,7 @@ int OpenConnection()
 			/*printf("Connection capacity full. Closing..\n");
 			close(accept_fd);*/
 		}
-		
+
         return accept_fd;
 	}
 }
@@ -202,27 +202,29 @@ bool Authentication(int accept_fd){
     char *Password;
     char *Payload;
 
-    Payload = malloc(sizeof(char)*INT_MAX);
+    //Payload = malloc(sizeof(char)*INT_MAX);
 
     count = read(accept_fd, &message, sizeof(message));
-	
+
 	if (count < 1) {
 		printf("Error. Null message. Connection terminated.\n");
 		close(accept_fd);
 		connection_count--;
 		pthread_exit();
 	}
-	
+
 	message.length = ntohl(message.length);
-	
+
 	if (!IsValid(message)) {
 		close(accept_fd);
 		connection_count--;
 		pthread_exit();
 	}
-	
+
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
     TotalBytes = message.length-count;
+
+    Payload = malloc(sizeof(char)*TotalBytes);
 
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
@@ -289,7 +291,7 @@ void LS(int accept_fd){
     char* Payload;
 
     Payload = malloc(sizeof(char)*INT_MAX);
-    strcpy(Payload,"");
+    //strcpy(Payload,"");
 
     ReadBytes = 0;
     WroteBytes = 0;
@@ -351,14 +353,15 @@ void Get(int accept_fd, unsigned int length){
     char* ptr;
     char pwd[1000];
 
-    Payload = malloc(sizeof(char)*INT_MAX);
+    //Payload = malloc(sizeof(char)*INT_MAX);
     DirPath = malloc(sizeof(char)*1000);
     RealPath = malloc(sizeof(char)*1000);
-    strcpy(Payload,"");
     ReadBytes =0;
     WroteBytes=0;
 
     TotalBytes = length -12;
+
+    Payload = malloc(sizeof(char)*TotalBytes);
 
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
@@ -461,12 +464,14 @@ void Get(int accept_fd, unsigned int length){
         message.type = FILE_DATA;
         message.length = 12 + FileSize;
 
-        TotalBytes = message.length;
+        TotalBytes = 12;
         WroteBytes = 0;
 
         message.length = htonl(message.length);
 
         write(accept_fd, &message, sizeof(message));
+
+        Payload = malloc(sizeof(char)*FileSize);
 
         fread(Payload,1,FileSize,File);
 
@@ -481,6 +486,8 @@ void Get(int accept_fd, unsigned int length){
         }
 
         fclose(File);
+
+        free(Payload);
 
     }
 }
@@ -497,13 +504,13 @@ void Put(int accept_fd, unsigned int length){
     FILE* Output;
     char* Payload;
 
-    Payload = malloc(sizeof(char)*INT_MAX);
-    strcpy(Payload,"");
-
     Filename = malloc(sizeof(char)*1000);
     Filename2 = malloc(sizeof(char)*1000);
 
     TotalBytes = length -12;
+
+    Payload = malloc(sizeof(char)*TotalBytes);
+    //strcpy(Payload,"");
 
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
@@ -541,23 +548,25 @@ void Put(int accept_fd, unsigned int length){
 			connection_count--;
 			pthread_exit();
 	}
-	
+
     message.length = ntohl(message.length);
-	
+
 	if (!IsValid(message)) {
 		close(accept_fd);
 		connection_count--;
 		pthread_exit();
 	}
-	
+
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
-    strcpy(Payload,"");
+    free(Payload);
 
     FileSize = message.length-12;
 
     TotalBytes = message.length-12;
     ReadBytes = 0;
+
+    Payload = malloc(sizeof(char)*TotalBytes);
 
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
@@ -581,6 +590,8 @@ void Put(int accept_fd, unsigned int length){
 
     fclose(Output);
 
+    free(Payload);
+
 }
 
 void Quit(int accept_fd){
@@ -596,7 +607,7 @@ void Quit(int accept_fd){
 	message.length = 12;
 
     message.length = htonl(message.length);
-	
+
     send(fd, &message, sizeof(message), MSG_NOSIGNAL);
 	printf("Ending, Accept_fd = %d\n", accept_fd);
 }
@@ -607,14 +618,14 @@ void MainLoop(int accept_fd){
     int TotalBytes, ReadBytes, WroteBytes;
     int i;
     unsigned char Command;
-    char* Payload;
+    //char* Payload;
     bool EndThread = false;
 
-    Payload = malloc(sizeof(char)*INT_MAX);
-    strcpy(Payload,"");
+    //Payload = malloc(sizeof(char)*12);
+    //strcpy(Payload,"");
 
     while (1){
-        strcpy(Payload,"");
+        //strcpy(Payload,"");
         ReadBytes = 0;
         WroteBytes = 0;
 
@@ -625,9 +636,9 @@ void MainLoop(int accept_fd){
 			connection_count--;
 			pthread_exit();
 		}
-		
+
 		message.length = ntohl(message.length);
-		
+
 		if (!IsValid(message)) {
 			close(accept_fd);
 			connection_count--;
@@ -664,8 +675,8 @@ void MainLoop(int accept_fd){
 
     }
 
-    free(Payload);
-	
+    //free(Payload);
+
     /*Maybe you should end the thread at here.*/
 
 }
@@ -674,34 +685,34 @@ void *Client(void *accept_fdp){
 	int count ;
     int accept_fd;
 	bool match;
-	
+
 	struct message_s message;
-	
+
 	if (accept_fdp == NULL)
-		exit(0);	
-		
+		exit(0);
+
 	accept_fd = *((int *)accept_fdp);
 	printf("Clients count = %d\n", connection_count);
 	printf("Accept_fd = %d\n", accept_fd);
 	count = read(accept_fd, &message, sizeof(message));
-	
+
 	/*Check the message*/
-	
+
 	if (count < 1) {
 			printf("Error. Null message. Connection terminated.\n");
 			close(accept_fd);
 			connection_count--;
 			pthread_exit();
 	}
-	
+
 	message.length = ntohl(message.length);
-	
+
 	if (!IsValid(message)) {
 		close(accept_fd);
 		connection_count--;
 		pthread_exit();
 	}
-	
+
 
 	printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
@@ -717,7 +728,7 @@ void *Client(void *accept_fdp){
 	message.length = htonl(message.length);
 
 	write(accept_fd, &message, sizeof(message));
-	
+
 	match = Authentication(accept_fd);
     if (match)
 		MainLoop(accept_fd);
@@ -743,10 +754,11 @@ bool IsValid(struct message_s message){
 		printf("Invalid Message: invalid message length field. Connection terminated\n");
 		return false;
 	}
-	if ( ((message.type == OPEN_CONN_REQUEST) || (message.type == LIST_REQUEST) || (message.type == QUIT_REQUEST)) 
+	if ( ((message.type == OPEN_CONN_REQUEST) || (message.type == LIST_REQUEST) || (message.type == QUIT_REQUEST))
 		&& (message.length != 12)){ //Validate message length according to type
 		printf("Invalid Message: invalid message length field 2. Connection terminated\n");
 		return false;
 	}
 	return true;
 }
+
