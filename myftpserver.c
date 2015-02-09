@@ -206,7 +206,6 @@ bool Authentication(int accept_fd){
     Payload = malloc(sizeof(char)*INT_MAX);
 
     count = read(accept_fd, &message, sizeof(message));
-    message.length = ntohl(message.length);
 	
 	if (count < 1) {
 		printf("Error. Null message. Connection terminated.\n");
@@ -214,7 +213,9 @@ bool Authentication(int accept_fd){
 		connection_count--;
 		pthread_exit();
 	}
-		
+	
+	message.length = ntohl(message.length);
+	
 	if (!IsValid(message)) {
 		close(accept_fd);
 		connection_count--;
@@ -314,7 +315,7 @@ void LS(int accept_fd){
     message.protocol[3] = 'f';
     message.protocol[4] = 't';
     message.protocol[5] = 'p';
-    message.type = AUTH_REPLY;
+    message.type = LIST_REPLY;
     message.length = 12 + strlen(Payload)+1;
 
     printf("%s %d\n", Payload, strlen(Payload));
@@ -541,8 +542,15 @@ void Put(int accept_fd, unsigned int length){
 			connection_count--;
 			pthread_exit();
 	}
+	
     message.length = ntohl(message.length);
-
+	
+	if (!IsValid(message)) {
+		close(accept_fd);
+		connection_count--;
+		pthread_exit();
+	}
+	
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
     strcpy(Payload,"");
@@ -618,13 +626,14 @@ void MainLoop(int accept_fd){
 			connection_count--;
 			pthread_exit();
 		}
+		
+		message.length = ntohl(message.length);
+		
 		if (!IsValid(message)) {
 			close(accept_fd);
 			connection_count--;
 			pthread_exit();
 		}
-		
-        message.length = ntohl(message.length);
 
         printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
@@ -676,21 +685,24 @@ void *Client(void *accept_fdp){
 	printf("Clients count = %d\n", connection_count);
 	printf("Accept_fd = %d\n", accept_fd);
 	count = read(accept_fd, &message, sizeof(message));
+	
+	/*Check the message*/
+	
 	if (count < 1) {
 			printf("Error. Null message. Connection terminated.\n");
 			close(accept_fd);
 			connection_count--;
 			pthread_exit();
 	}
+	
+	message.length = ntohl(message.length);
+	
 	if (!IsValid(message)) {
 		close(accept_fd);
 		connection_count--;
 		pthread_exit();
 	}
 	
-    message.length = ntohl(message.length);
-
-    /*Check the message*/
 
 	printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
@@ -728,8 +740,13 @@ bool IsValid(struct message_s message){
 		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
 		return false;
 	}
-	if (message.length < 12) {
+	if (message.length < 12 || message.length > INT_MAX) { //Validate message length
 		printf("Invalid Message: invalid message length field. Connection terminated\n");
+		return false;
+	}
+	if ( ((message.type == OPEN_CONN_REQUEST) || (message.type == LIST_REQUEST) || (message.type == QUIT_REQUEST)) 
+		&& (message.length != 12)){ //Validate message length according to type
+		printf("Invalid Message: invalid message length field 2. Connection terminated\n");
 		return false;
 	}
 	return true;

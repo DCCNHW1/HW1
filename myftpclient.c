@@ -60,21 +60,31 @@ struct sockaddr_in addr;
 unsigned int addrlen = sizeof(struct sockaddr_in);
 struct message_s message;
 
-bool IsValid(struct message_s message){
+bool IsValid(struct message_s message, unsigned int msg_type){
 	unsigned char stdprot[6] = {0xe3, 'm', 'y', 'f', 't', 'p'};
 	int i;
+	if (message.type != msg_type){
+		printf("Invalid message: type mismatch. Closing..\n");
+		return false;
+	}
 	for (i = 0; i < 6; i++)
 		if (message.protocol[i] != stdprot[i]){ //Validate protocol header
-			printf("Invalid Message: invalid protocol header. Connection terminated.\n");
+			printf("Invalid Message: invalid protocol header. Closing..\n");
 			return false;
 		}
 	if (((message.type < OPEN_CONN_REQUEST) || (message.type > QUIT_REPLY)) //Validate message type
 		&& (message.type != FILE_DATA)){
-		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
+		printf("Invalid Message: invalid protocol message type. Closing..\n");
 		return false;
 	}
-	if (message.length < 12) {
-		printf("Invalid Message: invalid message length field. Connection terminated\n");
+	if (message.length < 12 || message.length > INT_MAX) {
+		printf("Invalid Message: invalid message length field. Closing..\n");
+		return false;
+	}
+	if ( ((message.type == OPEN_CONN_REPLY) || (message.type == AUTH_REPLY) || (message.type == GET_REPLY) || 
+	(message.type == PUT_REPLY) || (message.type == QUIT_REPLY) )
+	&& (message.length != 12)){
+		printf("Invalid Message: invalid message length field. Closing..\n");
 		return false;
 	}
 	return true;
@@ -88,7 +98,7 @@ int OpenConnection(in_addr_t ip, unsigned short port){
 	message.protocol[3] = 'f';
 	message.protocol[4] = 't';
 	message.protocol[5] = 'p';
-	message.type = 0xA1;
+	message.type = OPEN_CONN_REQUEST;
 	message.status = 0x00;
 	message.length = 12;
 
@@ -119,8 +129,18 @@ int OpenConnection(in_addr_t ip, unsigned short port){
         write(fd, &message, sizeof(message));
 
         count = read(fd, &message, sizeof(message));
-
-        message.length = ntohl(message.length);
+		if (count < 1) {
+			printf("Error. Null message. Closing..\n");
+			close(fd);
+			exit(1);
+		}
+		
+		message.length = ntohl(message.length);
+		
+		if (!IsValid(message, OPEN_CONN_REPLY)) {
+			close(fd);
+			exit(1);
+		}
 
         /*Check the message*/
         if (count = 12)
@@ -148,7 +168,7 @@ void Authentication(){
 	message.protocol[3] = 'f';
 	message.protocol[4] = 't';
 	message.protocol[5] = 'p';
-	message.type = 0xA3;
+	message.type = AUTH_REQUEST;
 	message.status = 0x00;
 	message.length = 12+strlen(UserName)+strlen(Password)+2;
 
@@ -163,8 +183,19 @@ void Authentication(){
 	write(fd, Payload, strlen(Payload)+1);
 
     count = read(fd, &message, sizeof(message));
-    message.length = ntohl(message.length);
-
+	if (count < 1) {
+			printf("Error. Null message. Closing..\n");
+			close(fd);
+			exit(1);
+	}
+    
+	message.length = ntohl(message.length);
+	
+	if (!IsValid(message, AUTH_REPLY)) {
+			close(fd);
+			exit(1);
+	}
+	
     if (message.status == 1){
         printf("Authentication granted.\n");
         StateNum++;
@@ -190,7 +221,7 @@ void LS(char *Command, char *FileName){
 	message.protocol[3] = 'f';
 	message.protocol[4] = 't';
 	message.protocol[5] = 'p';
-	message.type = 0xA5;
+	message.type = LIST_REQUEST;
 	message.status = 0x00;
 	message.length = 12;
 
@@ -199,7 +230,18 @@ void LS(char *Command, char *FileName){
     write(fd, &message, sizeof(message));
 
     count = read(fd, &message, sizeof(message));
-    message.length = ntohl(message.length);
+    if (count < 1) {
+			printf("Error. Null message. Closing..\n");
+			close(fd);
+			exit(1);
+		}
+		
+	message.length = ntohl(message.length);
+		
+	if (!IsValid(message, LIST_REPLY)) {
+		close(fd);
+		exit(1);
+	}
 
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
@@ -236,7 +278,7 @@ void Get(char *Command, char *FileName){
 	message.protocol[3] = 'f';
 	message.protocol[4] = 't';
 	message.protocol[5] = 'p';
-	message.type = 0xA7;
+	message.type = GET_REQUEST;
 	message.status = 0x00;
 	message.length = 12+strlen(Payload)+1;
 
@@ -253,13 +295,36 @@ void Get(char *Command, char *FileName){
     }
 
     count = read(fd, &message, sizeof(message));
-    message.length = ntohl(message.length);
+    if (count < 1) {
+			printf("Error. Null message. Closing..\n");
+			close(fd);
+			exit(1);
+	}
+		
+	message.length = ntohl(message.length);
+		
+	if (!IsValid(message, GET_REPLY)) {
+		close(fd);
+		exit(1);
+	}
 
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
     if (message.status){
         count = read(fd, &message, sizeof(message));
-        message.length = ntohl(message.length);
+		
+        if (count < 1) {
+			printf("Error. Null message. Closing..\n");
+			close(fd);
+			exit(1);
+		}
+		
+		message.length = ntohl(message.length);
+		
+		if (!IsValid(message, FILE_DATA)) {
+			close(fd);
+			exit(1);
+		}
 
         printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
@@ -272,6 +337,13 @@ void Get(char *Command, char *FileName){
 
         while (ReadBytes < TotalBytes){
             count = read(fd, Payload+ReadBytes, TotalBytes-ReadBytes);
+			
+			if (count < 1) {
+				printf("Error. Null message. Closing..\n");
+				close(fd);
+				exit(1);
+			}
+			
             ReadBytes +=count;
         }
         message.length = ntohl(message.length);
@@ -355,7 +427,7 @@ void Put(char *Command, char *FileName){
             message.protocol[3] = 'f';
             message.protocol[4] = 't';
             message.protocol[5] = 'p';
-            message.type = 0xA9;
+            message.type = PUT_REQUEST;
             message.status = 0x00;
 
             File = fopen(PureFilename,"r");
@@ -381,14 +453,26 @@ void Put(char *Command, char *FileName){
             }
 
             count = read(fd, &message, sizeof(message));
-
+			if (count < 1) {
+				printf("Error. Null message. Closing..\n");
+				close(fd);
+				exit(1);
+			}
+		
+			message.length = ntohl(message.length);
+		
+			if (!IsValid(message, PUT_REPLY)) {
+				close(fd);
+				exit(1);
+			}
+			
             message.protocol[0] = 0xe3;
             message.protocol[1] = 'm';
             message.protocol[2] = 'y';
             message.protocol[3] = 'f';
             message.protocol[4] = 't';
             message.protocol[5] = 'p';
-            message.type = 0xFF;
+            message.type = FILE_DATA;
             message.status = 0x00;
             message.length = 12+FileSize;
             message.length = htonl(message.length);
@@ -412,7 +496,7 @@ void Put(char *Command, char *FileName){
 
         }
         else
-            printf("ERROE: the file does not exist.\n");
+            printf("ERROR: the file does not exist.\n");
     }
     else{
         printf("ERROR: the input is not referring to current directory.\n");
@@ -427,7 +511,7 @@ void Quit(){
 	message.protocol[3] = 'f';
 	message.protocol[4] = 't';
 	message.protocol[5] = 'p';
-	message.type = 0xAB;
+	message.type = QUIT_REQUEST;
 	message.status = 0x00;
 	message.length = 12;
 
@@ -436,7 +520,18 @@ void Quit(){
     send(fd, &message, sizeof(message), 0);
     count = recv(fd, &message, sizeof(message), 0);
 	
+	if (count < 1) {
+		printf("Error. Null message. Closing..\n");
+		close(fd);
+		exit(1);
+	}
+		
 	message.length = ntohl(message.length);
+		
+	if (!IsValid(message, QUIT_REPLY)) {
+		close(fd);
+		exit(1);
+	}
 
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
