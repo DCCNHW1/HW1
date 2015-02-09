@@ -11,11 +11,26 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <dirent.h>
-#include <limits.h>
+//#include <limits.h>
 
 typedef int bool;
 #define true 1
 #define false 0
+#define INT_MAX 32767
+
+#define OPEN_CONN_REQUEST 0xA1
+#define OPEN_CONN_REPLY 0xA2
+#define AUTH_REQUEST 0xA3
+#define AUTH_REPLY 0xA4
+#define LIST_REQUEST 0xA5
+#define LIST_REPLY 0xA6
+#define GET_REQUEST 0xA7
+#define GET_REPLY 0xA8
+#define FILE_DATA 0xFF
+#define PUT_REQUEST 0xA9
+#define PUT_REPLY 0xAA
+#define QUIT_REQUEST 0xAB
+#define QUIT_REPLY 0xAC
 
 enum STATES {Idle, Opened, Authed};
 
@@ -44,6 +59,26 @@ unsigned int count;
 struct sockaddr_in addr;
 unsigned int addrlen = sizeof(struct sockaddr_in);
 struct message_s message;
+
+bool IsValid(struct message_s message){
+	unsigned char stdprot[6] = {0xe3, 'm', 'y', 'f', 't', 'p'};
+	int i;
+	for (i = 0; i < 6; i++)
+		if (message.protocol[i] != stdprot[i]){ //Validate protocol header
+			printf("Invalid Message: invalid protocol header. Connection terminated.\n");
+			return false;
+		}
+	if (((message.type < OPEN_CONN_REQUEST) || (message.type > QUIT_REPLY)) //Validate message type
+		&& (message.type != FILE_DATA)){
+		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
+		return false;
+	}
+	if (message.length < 12) {
+		printf("Invalid Message: invalid message length field. Connection terminated\n");
+		return false;
+	}
+	return true;
+}
 
 int OpenConnection(in_addr_t ip, unsigned short port){
 
@@ -430,7 +465,7 @@ int main(){
 	in_addr_t ip;
 	unsigned short port;
 
-	Payload = (char* )malloc(sizeof(char)*32767);
+	Payload = (char* )malloc(sizeof(char)*INT_MAX);
 
 	StateNum = Idle;
 

@@ -11,13 +11,28 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <dirent.h>
-#include <limits.h>
+//#include <limits.h>
 
 typedef int bool;
 #define true 1
 #define false 0
 
 #define MAX_N 5
+#define INT_MAX 32767
+
+#define OPEN_CONN_REQUEST 0xA1
+#define OPEN_CONN_REPLY 0xA2
+#define AUTH_REQUEST 0xA3
+#define AUTH_REPLY 0xA4
+#define LIST_REQUEST 0xA5
+#define LIST_REPLY 0xA6
+#define GET_REQUEST 0xA7
+#define GET_REPLY 0xA8
+#define FILE_DATA 0xFF
+#define PUT_REQUEST 0xA9
+#define PUT_REPLY 0xAA
+#define QUIT_REQUEST 0xAB
+#define QUIT_REPLY 0xAC
 
 enum STATES {Idle, Opened, Authed};
 
@@ -56,19 +71,20 @@ void Put(int accept_fd, unsigned int length);
 void Quit(int accept_fd);
 void MainLoop(int accept_fd);
 void *Client(void *accept_fdp);
+bool IsValid(struct message_s message);
 
 int main(int argc, char **argv){
 
 	unsigned short port;
     bool match = false;
 	int accept_fd;
-
+	
     if(argc != 2)
 	{
 		fprintf(stderr, "Usage: %s [port]\n", argv[0]);
 		exit(1);
 	}
-
+	
 	NumRecord = ReadRecords();
 
 	port = atoi(argv[1]);
@@ -89,7 +105,12 @@ int main(int argc, char **argv){
 
 unsigned int ReadRecords(){
     FILE* fp = fopen("access.txt","r");
-
+	
+	if (fp == NULL) {
+		perror("Fail to open file");
+		exit(1);
+	}
+	
     unsigned int i = 0;
     int c ;
 
@@ -153,7 +174,7 @@ int OpenConnection()
 	struct message_s message;
 
 	while (1){
-		printf("Before accept\n");
+		//printf("Before accept\n");
         if( (accept_fd = accept(fd, (struct sockaddr *) &tmp_addr, &addrlen)) == -1)
 		{
 			perror("accept()");
@@ -162,6 +183,9 @@ int OpenConnection()
 		if (connection_count < MAX_N){
 			pthread_create(&connections[connection_count], NULL, Client, (void *) &accept_fd);
 			connection_count++;
+		} else {
+			/*printf("Connection capacity full. Closing..\n");
+			close(accept_fd);*/
 		}
 		
         return accept_fd;
@@ -179,17 +203,35 @@ bool Authentication(int accept_fd){
     char *Password;
     char *Payload;
 
-    Payload = malloc(sizeof(char)*32767);
+    Payload = malloc(sizeof(char)*INT_MAX);
 
     count = read(accept_fd, &message, sizeof(message));
     message.length = ntohl(message.length);
-
+	
+	if (count < 1) {
+		printf("Error. Null message. Connection terminated.\n");
+		close(accept_fd);
+		connection_count--;
+		pthread_exit();
+	}
+		
+	if (!IsValid(message)) {
+		close(accept_fd);
+		connection_count--;
+		pthread_exit();
+	}
+	
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
-
     TotalBytes = message.length-count;
 
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
+		if (count < 1) {
+			printf("Error. Null message. Connection terminated.\n");
+			close(accept_fd);
+			connection_count--;
+			pthread_exit();
+		}
         ReadBytes +=count;
         printf("ReadBytes:%d UserNamePassword:%s\n",ReadBytes, Payload);
     }
@@ -212,7 +254,7 @@ bool Authentication(int accept_fd){
 	message.protocol[3] = 'f';
 	message.protocol[4] = 't';
 	message.protocol[5] = 'p';
-	message.type = 0xA4;
+	message.type = AUTH_REPLY;
 	message.length = 12;
 
     if (match){
@@ -246,7 +288,7 @@ void LS(int accept_fd){
     int i;
     char* Payload;
 
-    Payload = malloc(sizeof(char)*32767);
+    Payload = malloc(sizeof(char)*INT_MAX);
     strcpy(Payload,"");
 
     ReadBytes = 0;
@@ -272,7 +314,7 @@ void LS(int accept_fd){
     message.protocol[3] = 'f';
     message.protocol[4] = 't';
     message.protocol[5] = 'p';
-    message.type = 0xA6;
+    message.type = AUTH_REPLY;
     message.length = 12 + strlen(Payload)+1;
 
     printf("%s %d\n", Payload, strlen(Payload));
@@ -309,7 +351,7 @@ void Get(int accept_fd, unsigned int length){
     char* ptr;
     char pwd[1000];
 
-    Payload = malloc(sizeof(char)*32767);
+    Payload = malloc(sizeof(char)*INT_MAX);
     DirPath = malloc(sizeof(char)*1000);
     RealPath = malloc(sizeof(char)*1000);
     strcpy(Payload,"");
@@ -320,6 +362,12 @@ void Get(int accept_fd, unsigned int length){
 
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
+		if (count < 1) {
+			printf("Error. Null message. Connection terminated.\n");
+			close(accept_fd);
+			connection_count--;
+			pthread_exit();
+		}
         ReadBytes +=count;
     }
 
@@ -375,7 +423,7 @@ void Get(int accept_fd, unsigned int length){
     message.protocol[5] = 'p';
 
     if (!exist){                        //File does not exist
-        message.type = 0xA8;
+        message.type = GET_REPLY;
         message.status = 0;
         message.length = 12;
 
@@ -387,7 +435,7 @@ void Get(int accept_fd, unsigned int length){
         write(accept_fd, &message, sizeof(message));
     }
     else{                               //File exist
-        message.type = 0xA8;
+        message.type = GET_REPLY;
         message.status = 1;
         message.length = 12;
 
@@ -401,13 +449,16 @@ void Get(int accept_fd, unsigned int length){
         strcpy(DirPath,"filedir/");
         strcat(DirPath,Filename);
         File = fopen(DirPath,"r");
-
+		if (File == NULL){
+			perror("Opening file error.");
+			exit(1);
+		}
         /*Check file size*/
         fseek(File,0,SEEK_END);
         FileSize = ftell(File);
         fseek(File, 0, SEEK_SET);
 
-        message.type = 0xFF;
+        message.type = FILE_DATA;
         message.length = 12 + FileSize;
 
         TotalBytes = message.length;
@@ -446,7 +497,7 @@ void Put(int accept_fd, unsigned int length){
     FILE* Output;
     char* Payload;
 
-    Payload = malloc(sizeof(char)*32767);
+    Payload = malloc(sizeof(char)*INT_MAX);
     strcpy(Payload,"");
 
     Filename = malloc(sizeof(char)*1000);
@@ -456,6 +507,12 @@ void Put(int accept_fd, unsigned int length){
 
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
+		if (count < 1) {
+			printf("Error. Null message. Connection terminated.\n");
+			close(accept_fd);
+			connection_count--;
+			pthread_exit();
+		}
         ReadBytes +=count;
     }
 
@@ -469,7 +526,7 @@ void Put(int accept_fd, unsigned int length){
 	message.protocol[3] = 'f';
 	message.protocol[4] = 't';
 	message.protocol[5] = 'p';
-	message.type = 0xAA;
+	message.type = PUT_REPLY;
 	message.status = 0x00;
 	message.length = 12;
 
@@ -478,7 +535,12 @@ void Put(int accept_fd, unsigned int length){
     write(accept_fd, &message, sizeof(message));
 
     count = read(accept_fd, &message, sizeof(message));
-
+	if (count < 1) {
+			printf("Error. Null message. Connection terminated.\n");
+			close(accept_fd);
+			connection_count--;
+			pthread_exit();
+	}
     message.length = ntohl(message.length);
 
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
@@ -492,6 +554,12 @@ void Put(int accept_fd, unsigned int length){
 
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
+		if (count < 1) {
+			printf("Error. Null message. Connection terminated.\n");
+			close(accept_fd);
+			connection_count--;
+			pthread_exit();
+		}
         ReadBytes +=count;
     }
 
@@ -516,14 +584,14 @@ void Quit(int accept_fd){
 	message.protocol[3] = 'f';
 	message.protocol[4] = 't';
 	message.protocol[5] = 'p';
-	message.type = 0xAC;
+	message.type = QUIT_REPLY;
 	message.status = 0x00;
 	message.length = 12;
 
     message.length = htonl(message.length);
 	
     send(fd, &message, sizeof(message), MSG_NOSIGNAL);
-	close(accept_fd);
+	printf("Ending, Accept_fd = %d\n", accept_fd);
 }
 
 void MainLoop(int accept_fd){
@@ -535,7 +603,7 @@ void MainLoop(int accept_fd){
     char* Payload;
     bool EndThread = false;
 
-    Payload = malloc(sizeof(char)*32767);
+    Payload = malloc(sizeof(char)*INT_MAX);
     strcpy(Payload,"");
 
     while (1){
@@ -544,6 +612,18 @@ void MainLoop(int accept_fd){
         WroteBytes = 0;
 
         count = read(accept_fd, &message, sizeof(message));
+		if (count < 1) {
+			printf("Error. Null message. Connection terminated.\n");
+			close(accept_fd);
+			connection_count--;
+			pthread_exit();
+		}
+		if (!IsValid(message)) {
+			close(accept_fd);
+			connection_count--;
+			pthread_exit();
+		}
+		
         message.length = ntohl(message.length);
 
         printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
@@ -551,19 +631,19 @@ void MainLoop(int accept_fd){
         Command = message.type;
 
         switch (Command){
-            case 0xA5 :{
+            case LIST_REQUEST :{
                 LS(accept_fd);
             }
             break;
-            case 0xA7 :{
+            case GET_REQUEST :{
                 Get(accept_fd, message.length);
             }
             break;
-            case 0xA9 :{
+            case PUT_REQUEST :{
                 Put(accept_fd, message.length);
             }
             break;
-            case 0xAB :{
+            case QUIT_REQUEST :{
                 Quit(accept_fd);
                 EndThread = true;
 				//pthread_exit();//Close the connection.
@@ -578,7 +658,6 @@ void MainLoop(int accept_fd){
 
     free(Payload);
 	
-	pthread_exit();
     /*Maybe you should end the thread at here.*/
 
 }
@@ -591,12 +670,24 @@ void *Client(void *accept_fdp){
 	struct message_s message;
 	
 	if (accept_fdp == NULL)
-		exit(0);
+		exit(0);	
 		
 	accept_fd = *((int *)accept_fdp);
+	printf("Clients count = %d\n", connection_count);
 	printf("Accept_fd = %d\n", accept_fd);
 	count = read(accept_fd, &message, sizeof(message));
-
+	if (count < 1) {
+			printf("Error. Null message. Connection terminated.\n");
+			close(accept_fd);
+			connection_count--;
+			pthread_exit();
+	}
+	if (!IsValid(message)) {
+		close(accept_fd);
+		connection_count--;
+		pthread_exit();
+	}
+	
     message.length = ntohl(message.length);
 
     /*Check the message*/
@@ -609,7 +700,7 @@ void *Client(void *accept_fdp){
     message.protocol[3] = 'f';
     message.protocol[4] = 't';
     message.protocol[5] = 'p';
-    message.type = 0xA2;
+    message.type = OPEN_CONN_REPLY;
     message.status = 0x00;
     message.length = 12;
 	message.length = htonl(message.length);
@@ -619,6 +710,27 @@ void *Client(void *accept_fdp){
 	match = Authentication(accept_fd);
     if (match)
 		MainLoop(accept_fd);
-		
+	close(accept_fd);
+	pthread_exit();
 	return;
+}
+
+bool IsValid(struct message_s message){
+	unsigned char stdprot[6] = {0xe3, 'm', 'y', 'f', 't', 'p'};
+	int i;
+	for (i = 0; i < 6; i++)
+		if (message.protocol[i] != stdprot[i]){ //Validate protocol header
+			printf("Invalid Message: invalid protocol header. Connection terminated.\n");
+			return false;
+		}
+	if (((message.type < OPEN_CONN_REQUEST) || (message.type > QUIT_REPLY)) //Validate message type
+		&& (message.type != FILE_DATA)){
+		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
+		return false;
+	}
+	if (message.length < 12) {
+		printf("Invalid Message: invalid message length field. Connection terminated\n");
+		return false;
+	}
+	return true;
 }
