@@ -129,7 +129,7 @@ int OpenConnection(in_addr_t ip, unsigned short port){
 
         count = read(fd, &message, sizeof(message));
 		if (count < 1) {
-			printf("Error. Null message. Closing..\n");
+			printf("Error. Connection has been terminated by the other end. Closing.. \n");
 			close(fd);
 			exit(1);
 		}
@@ -183,7 +183,7 @@ void Authentication(){
 
     count = read(fd, &message, sizeof(message));
 	if (count < 1) {
-			printf("Error. Null message. Closing..\n");
+			printf("Error. Connection has been terminated by the other end. Closing.. \n");
 			close(fd);
 			exit(1);
 	}
@@ -230,7 +230,7 @@ void LS(char *Command, char *FileName){
 
     count = read(fd, &message, sizeof(message));
     if (count < 1) {
-			printf("Error. Null message. Closing..\n");
+			printf("Error. Connection has been terminated by the other end. Closing.. \n");
 			close(fd);
 			exit(1);
 		}
@@ -295,7 +295,7 @@ void Get(char *Command, char *FileName){
 
     count = read(fd, &message, sizeof(message));
     if (count < 1) {
-			printf("Error. Null message. Closing..\n");
+			printf("Error. Connection has been terminated by the other end. Closing.. \n");
 			close(fd);
 			exit(1);
 	}
@@ -313,7 +313,7 @@ void Get(char *Command, char *FileName){
         count = read(fd, &message, sizeof(message));
 
         if (count < 1) {
-			printf("Error. Null message. Closing..\n");
+			printf("Error. Connection has been terminated by the other end. Closing.. \n");
 			close(fd);
 			exit(1);
 		}
@@ -338,7 +338,7 @@ void Get(char *Command, char *FileName){
             count = read(fd, Payload+ReadBytes, TotalBytes-ReadBytes);
 
 			if (count < 1) {
-				printf("Error. Null message. Closing..\n");
+				printf("Error. Connection has been terminated by the other end. Closing.. \n");
 				close(fd);
 				exit(1);
 			}
@@ -453,7 +453,7 @@ void Put(char *Command, char *FileName){
 
             count = read(fd, &message, sizeof(message));
 			if (count < 1) {
-				printf("Error. Null message. Closing..\n");
+				printf("Error. Connection has been terminated by the other end. Closing.. \n");
 				close(fd);
 				exit(1);
 			}
