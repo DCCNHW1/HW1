@@ -46,6 +46,11 @@ struct record_s {
     char UserName[32];
     char Password[32];
 };
+typedef struct ThreadData {
+	char client_ip[INET_ADDRSTRLEN];
+	unsigned short client_port;
+	int accept_fd;
+} client_data_s;
 
 struct record_s Record[200];
 unsigned int NumRecord;
@@ -170,6 +175,7 @@ int OpenConnection()
     int count ;
     int accept_fd;
 
+	client_data_s client_data;
 	struct message_s message;
 
 	while (1){
@@ -180,7 +186,10 @@ int OpenConnection()
 			exit(1);
 		}
 		if (connection_count < MAX_N){
-			pthread_create(&connections[connection_count], NULL, Client, (void *) &accept_fd);
+			inet_ntop(AF_INET, &tmp_addr.sin_addr, client_data.client_ip, INET_ADDRSTRLEN); //Put necessary data into a struct 
+			client_data.client_port = tmp_addr.sin_port;
+			client_data.accept_fd = accept_fd;
+			pthread_create(&connections[connection_count], NULL, Client, (void *) &client_data);
 			connection_count++;
 		} else {
 			/*printf("Connection capacity full. Closing..\n");
@@ -225,12 +234,17 @@ bool Authentication(int accept_fd){
     TotalBytes = message.length-count;
 
     Payload = malloc(sizeof(char)*TotalBytes);
-
+	if (Payload == NULL){
+		printf("Fatal Error: out of memory. \n");
+		exit(1);
+	}
+	
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
 		if (count < 1) {
 			printf("Error. Null message. Connection terminated.\n");
 			close(accept_fd);
+			free(Payload);
 			connection_count--;
 			pthread_exit();
 		}
@@ -292,7 +306,11 @@ void LS(int accept_fd){
 
     Payload = malloc(sizeof(char)*INT_MAX);
     //strcpy(Payload,"");
-
+	if (Payload == NULL){
+		printf("Fatal Error: out of memory. \n");
+		exit(1);
+	}
+	
     ReadBytes = 0;
     WroteBytes = 0;
 
@@ -356,18 +374,24 @@ void Get(int accept_fd, unsigned int length){
     //Payload = malloc(sizeof(char)*INT_MAX);
     DirPath = malloc(sizeof(char)*1000);
     RealPath = malloc(sizeof(char)*1000);
-    ReadBytes =0;
+    Payload = malloc(sizeof(char)*TotalBytes);
+	
+	if ((Payload == NULL) || (DirPath == NULL) || (RealPath == NULL)){
+		printf("Fatal Error: out of memory. \n");
+		exit(1);
+	}
+	
+	ReadBytes =0;
     WroteBytes=0;
 
     TotalBytes = length -12;
-
-    Payload = malloc(sizeof(char)*TotalBytes);
-
+	
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
 		if (count < 1) {
 			printf("Error. Null message. Connection terminated.\n");
 			close(accept_fd);
+			free(Payload);
 			connection_count--;
 			pthread_exit();
 		}
@@ -472,7 +496,10 @@ void Get(int accept_fd, unsigned int length){
         write(accept_fd, &message, sizeof(message));
 
         Payload = malloc(sizeof(char)*FileSize);
-
+		if (NULL == Payload) {
+			printf("Fatal Error: out of memory. Exiting..\n");
+			exit(1);
+		}
         fread(Payload,1,FileSize,File);
 
         TotalBytes = FileSize;
@@ -510,6 +537,10 @@ void Put(int accept_fd, unsigned int length){
     TotalBytes = length -12;
 
     Payload = malloc(sizeof(char)*TotalBytes);
+	if ((NULL == Payload) || (NULL == Filename) || (NULL == Filename2)) {
+		printf("Fatal Error: out of memory. Exiting..\n");
+		exit(1);
+	}
     //strcpy(Payload,"");
 
     while (ReadBytes < TotalBytes){
@@ -517,6 +548,7 @@ void Put(int accept_fd, unsigned int length){
 		if (count < 1) {
 			printf("Error. Null message. Connection terminated.\n");
 			close(accept_fd);
+			free(Payload);
 			connection_count--;
 			pthread_exit();
 		}
@@ -545,6 +577,7 @@ void Put(int accept_fd, unsigned int length){
 	if (count < 1) {
 			printf("Error. Null message. Connection terminated.\n");
 			close(accept_fd);
+			free(Payload);
 			connection_count--;
 			pthread_exit();
 	}
@@ -553,6 +586,7 @@ void Put(int accept_fd, unsigned int length){
 
 	if (!IsValid(message)) {
 		close(accept_fd);
+		free(Payload);
 		connection_count--;
 		pthread_exit();
 	}
@@ -567,12 +601,18 @@ void Put(int accept_fd, unsigned int length){
     ReadBytes = 0;
 
     Payload = malloc(sizeof(char)*TotalBytes);
-
+	
+	if (NULL == Payload) {
+		printf("Fatal Error: out of memory. Exiting..\n");
+		exit(1);
+	}
+	
     while (ReadBytes < TotalBytes){
         count = read(accept_fd, Payload+ReadBytes, TotalBytes-ReadBytes);
 		if (count < 1) {
 			printf("Error. Null message. Connection terminated.\n");
 			close(accept_fd);
+			free(Payload);
 			connection_count--;
 			pthread_exit();
 		}
@@ -608,8 +648,11 @@ void Quit(int accept_fd){
 
     message.length = htonl(message.length);
 
-    send(fd, &message, sizeof(message), MSG_NOSIGNAL);
+    send(accept_fd, &message, sizeof(message), 0);
+
 	printf("Ending, Accept_fd = %d\n", accept_fd);
+	close(accept_fd);
+	connection_count--;
 }
 
 void MainLoop(int accept_fd){
@@ -675,25 +718,28 @@ void MainLoop(int accept_fd){
 
     }
 
-    //free(Payload);
-
+	//free(Payload);
+	//pthread_exit();
     /*Maybe you should end the thread at here.*/
 
 }
 
-void *Client(void *accept_fdp){
+void *Client(void *client_data_sp){
 	int count ;
     int accept_fd;
 	bool match;
-
+	char client_ip[INET_ADDRSTRLEN];
+	unsigned short client_port;
 	struct message_s message;
 
-	if (accept_fdp == NULL)
-		exit(0);
-
-	accept_fd = *((int *)accept_fdp);
+	accept_fd = ((client_data_s *) client_data_sp)->accept_fd; //extract data 
+	strcpy(client_ip, ((client_data_s *) client_data_sp)->client_ip);
+	client_port = ((client_data_s *) client_data_sp)->client_port;
+	
+	printf("New client: address %s, port %d\n", client_ip, client_port);
 	printf("Clients count = %d\n", connection_count);
 	printf("Accept_fd = %d\n", accept_fd);
+	
 	count = read(accept_fd, &message, sizeof(message));
 
 	/*Check the message*/
@@ -732,7 +778,9 @@ void *Client(void *accept_fdp){
 	match = Authentication(accept_fd);
     if (match)
 		MainLoop(accept_fd);
-	close(accept_fd);
+		
+	printf("Client disconnected: address %s, port %d\n", client_ip, client_port);
+	
 	pthread_exit();
 	return;
 }

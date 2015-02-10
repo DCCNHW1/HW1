@@ -520,7 +520,7 @@ void Quit(){
     count = recv(fd, &message, sizeof(message), 0);
 
 	if (count < 1) {
-		printf("Error. Null message. Closing..\n");
+		printf("Error. Null message here. Closing..\n");
 		close(fd);
 		exit(1);
 	}
