@@ -382,13 +382,18 @@ void Get(char *Command, char *FileName){
     //printf("|Mesasge| count:%d protocol:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
     if (message.status){
-        count = read(fd, &message, sizeof(message));
+        MsgReadBytes =0;
+        MsgBytesCount =0;
 
-        if (count < 1) {
-			printf("Error. Connection has been terminated by the other end. Closing.. \n");
-			close(fd);
-			exit(1);
-		}
+        while (MsgReadBytes <12) {
+            MsgBytesCount= read(fd, &message+MsgReadBytes, sizeof(message)-MsgReadBytes);
+            if (MsgBytesCount < 1) {
+                printf("Error. Connection has been terminated by the other end. Closing.. \n");
+                close(fd);
+                exit(1);
+            }
+            MsgReadBytes += MsgBytesCount;
+        }
 
 		message.length = ntohl(message.length);
 
@@ -775,4 +780,5 @@ int main(){
     }
 
 }
+
 
