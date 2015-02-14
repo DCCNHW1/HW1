@@ -663,7 +663,6 @@ void Quit(int accept_fd){
 
     send(accept_fd, &message, sizeof(message), 0);
 
-	printf("Ending, Accept_fd = %d\n", accept_fd);
 	
 	close(accept_fd);
 }
@@ -829,7 +828,7 @@ bool IsValid(struct message_s message){
 	}
 	if ( ((message.type == OPEN_CONN_REQUEST) || (message.type == LIST_REQUEST) || (message.type == QUIT_REQUEST))
 		&& (message.length != 12)){ //Validate message length according to type
-		printf("Invalid Message: invalid message length field 2. Connection terminated\n");
+		printf("Invalid Message: invalid message length field. Connection terminated\n");
 		return false;
 	}
 	return true;

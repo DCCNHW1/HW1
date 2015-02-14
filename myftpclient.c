@@ -520,7 +520,7 @@ void Quit(){
     count = recv(fd, &message, sizeof(message), 0);
 
 	if (count < 1) {
-		printf("Error. Null message here. Closing..\n");
+		printf("Error. Connection has been terminated by the other end. Closing.. \n");
 		close(fd);
 		exit(1);
 	}
@@ -568,7 +568,6 @@ int main(){
     while (1){
         InvalidInput = false;
         printf("Client> ");
-
         fgets(input,255,stdin);
         input[strlen(input)-1] ='\0';
 
