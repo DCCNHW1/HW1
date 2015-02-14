@@ -217,7 +217,6 @@ bool Authentication(int accept_fd){
 
     //Payload = malloc(sizeof(char)*INT_MAX);
 
-<<<<<<< HEAD
     MsgReadBytes =0;
     MsgBytesCount =0;
 
@@ -234,12 +233,6 @@ bool Authentication(int accept_fd){
 
 	if (message.type != AUTH_REQUEST) {
 		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
-=======
-    count = read(accept_fd, &message, sizeof(message));
-	
-	if (count < 1) {
-		printf("Error. Connection has been terminated by the other end. Closing.. \n");
->>>>>>> 1f827ab174d04e089e6d2cdfd66348063f0e048d
 		close(accept_fd);
 		connection_count--;
 		pthread_exit();
@@ -253,19 +246,8 @@ bool Authentication(int accept_fd){
 		pthread_exit();
 	}
 
-<<<<<<< HEAD
     printf("|Mesasge|\tcount:%d protocol:%s type:%u status:%u length:%d\n",MsgReadBytes,message.protocol, message.type, message.status, message.length);
     TotalBytes = message.length-12;
-=======
-	if (message.type != AUTH_REQUEST) {
-		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
-		close(accept_fd);
-		connection_count--;
-		pthread_exit();
-	}
-    printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
-    TotalBytes = message.length-count;
->>>>>>> 1f827ab174d04e089e6d2cdfd66348063f0e048d
 
     Payload = malloc(sizeof(char)*TotalBytes);
 	if (Payload == NULL){
@@ -689,22 +671,11 @@ void Put(int accept_fd, unsigned int length){
         MsgReadBytes += MsgBytesCount;
     }
 
-<<<<<<< HEAD
 	if (message.type != FILE_DATA) {
 		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
 		close(accept_fd);
 		connection_count--;
 		pthread_exit();
-=======
-    count = read(accept_fd, &message, sizeof(message));
-	
-	if (count < 1) {
-			printf("Error. Connection has been terminated by the other end. Closing.. \n");
-			close(accept_fd);
-			free(Payload);
-			connection_count--;
-			pthread_exit();
->>>>>>> 1f827ab174d04e089e6d2cdfd66348063f0e048d
 	}
 
     message.length = ntohl(message.length);
@@ -712,13 +683,6 @@ void Put(int accept_fd, unsigned int length){
 	if (!IsValid(message)) {
 		close(accept_fd);
 		free(Payload);
-		connection_count--;
-		pthread_exit();
-	}
-	
-	if (message.type != FILE_DATA) {
-		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
-		close(accept_fd);
 		connection_count--;
 		pthread_exit();
 	}
@@ -914,19 +878,11 @@ void *Client(void *client_data_sp){
     }
 
 	/*Check the message*/
-<<<<<<< HEAD
 	if (message.type != OPEN_CONN_REQUEST) {
 		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
 		close(accept_fd);
 		connection_count--;
 		pthread_exit();
-=======
-	if (count < 1) {
-			printf("Error. Connection has been terminated by the other end. Closing.. \n");
-			close(accept_fd);
-			connection_count--;
-			pthread_exit();
->>>>>>> 1f827ab174d04e089e6d2cdfd66348063f0e048d
 	}
 
 	message.length = ntohl(message.length);
@@ -937,18 +893,7 @@ void *Client(void *client_data_sp){
 		pthread_exit();
 	}
 
-<<<<<<< HEAD
 	printf("|Mesasge|\tcount:%d protocol:%s type:%u status:%u length:%d\n",MsgReadBytes,message.protocol, message.type, message.status, message.length);
-=======
-	if (message.type != OPEN_CONN_REQUEST) {
-		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
-		close(accept_fd);
-		connection_count--;
-		pthread_exit();
-	}
-
-	printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
->>>>>>> 1f827ab174d04e089e6d2cdfd66348063f0e048d
 
     message.protocol[0] = 0xe3;
     message.protocol[1] = 'm';
@@ -997,4 +942,5 @@ bool IsValid(struct message_s message){
 	}
 	return true;
 }
+
 
