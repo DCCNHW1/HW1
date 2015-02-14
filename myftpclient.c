@@ -51,8 +51,12 @@ char* Payload;
 char* token;
 enum STATES StateNum;
 bool InvalidInput;
+unsigned int TotalBytes;
 
-int buf;
+unsigned int MsgWroteBytes;
+unsigned int MsgReadBytes;
+unsigned int MsgBytesCount;
+
 int fd;
 unsigned int count;
 struct sockaddr_in addr;
@@ -86,6 +90,18 @@ bool IsValid(struct message_s message, unsigned int msg_type){
 		printf("Invalid Message: invalid message length field. Closing..\n");
 		return false;
 	}
+
+	if ((message.type == OPEN_CONN_REPLY) && (message.status != 1)){
+		printf("Invalid Message: invalid message status field. Closing..\n");
+		return false;
+	}
+
+	if (((message.type == AUTH_REPLY) || (message.type == GET_REPLY))
+		&& (message.status != 1) && (message.status != 0)){
+		printf("Invalid Message: invalid message status field. Closing..\n");
+		return false;
+	}
+
 	return true;
 }
 
@@ -101,7 +117,6 @@ int OpenConnection(in_addr_t ip, unsigned short port){
 	message.status = 0x00;
 	message.length = 12;
 
-
 	fd = socket(AF_INET, SOCK_STREAM, 0);
 
 	if(fd == -1)
@@ -109,7 +124,6 @@ int OpenConnection(in_addr_t ip, unsigned short port){
 		perror("socket()");
 		return 0;
 	}
-
 
 	memset(&addr, 0, sizeof(struct sockaddr_in));
 	addr.sin_family = AF_INET;
@@ -124,15 +138,27 @@ int OpenConnection(in_addr_t ip, unsigned short port){
 	else {
         message.length = htonl(message.length);
         //printf("%d",sizeof(unsigned int) );
+        MsgBytesCount =0;
+        MsgWroteBytes=0;
 
-        write(fd, &message, sizeof(message));
+        while (MsgWroteBytes < 12) {
+            MsgBytesCount = write(fd, &message+MsgWroteBytes, sizeof(message)-MsgWroteBytes);
+            MsgWroteBytes += MsgBytesCount;
+        }
 
-        count = read(fd, &message, sizeof(message));
-		if (count < 1) {
-			printf("Error. Connection has been terminated by the other end. Closing.. \n");
-			close(fd);
-			exit(1);
-		}
+        MsgReadBytes =0;
+        MsgBytesCount =0;
+
+        while (MsgReadBytes <12) {
+            MsgBytesCount= read(fd, &message+MsgReadBytes, sizeof(message)-MsgReadBytes);
+            if (MsgBytesCount < 1) {
+                printf("Error. Connection has been terminated by the other end. Closing.. \n");
+                close(fd);
+                exit(1);
+            }
+            MsgReadBytes += MsgBytesCount;
+        }
+
 
 		message.length = ntohl(message.length);
 
@@ -156,9 +182,8 @@ int OpenConnection(in_addr_t ip, unsigned short port){
 }
 
 void Authentication(){
-
     int i = 0;
-
+    unsigned int WroteBytes =0;
     strcpy(Payload,"");
 
     message.protocol[0] = 0xe3;
@@ -171,6 +196,8 @@ void Authentication(){
 	message.status = 0x00;
 	message.length = 12+strlen(UserName)+strlen(Password)+2;
 
+    TotalBytes = message.length -12;
+
     message.length = htonl(message.length);
 	//printf("%d",sizeof(unsigned int) );
 
@@ -178,15 +205,31 @@ void Authentication(){
     strcat(Payload, " ");
     strcat(Payload, Password);
 
-	write(fd, &message, sizeof(message));
-	write(fd, Payload, strlen(Payload)+1);
+    MsgBytesCount =0;
+    MsgWroteBytes=0;
 
-    count = read(fd, &message, sizeof(message));
-	if (count < 1) {
-			printf("Error. Connection has been terminated by the other end. Closing.. \n");
-			close(fd);
-			exit(1);
+    while (MsgWroteBytes < 12) {
+        MsgBytesCount = write(fd, &message+MsgWroteBytes, sizeof(message)-MsgWroteBytes);
+        MsgWroteBytes += MsgBytesCount;
+    }
+
+	while (WroteBytes < TotalBytes){
+        count = write(fd, Payload+WroteBytes, TotalBytes-WroteBytes);
+        WroteBytes += count;
 	}
+
+    MsgReadBytes =0;
+    MsgBytesCount =0;
+
+    while (MsgReadBytes <12) {
+        MsgBytesCount= read(fd, &message+MsgReadBytes, sizeof(message)-MsgReadBytes);
+        if (MsgBytesCount < 1) {
+            printf("Error. Connection has been terminated by the other end. Closing.. \n");
+            close(fd);
+            exit(1);
+        }
+        MsgReadBytes += MsgBytesCount;
+    }
 
 	message.length = ntohl(message.length);
 
@@ -208,9 +251,9 @@ void Authentication(){
 }
 
 void LS(char *Command, char *FileName){
-    int count;
-    int TotalBytes;
-    int ReadBytes =0;
+    unsigned int count;
+
+    unsigned int ReadBytes =0;
     //char* Payload;
     strcpy(Payload,"");
 
@@ -226,14 +269,26 @@ void LS(char *Command, char *FileName){
 
     message.length = htonl(message.length);
 
-    write(fd, &message, sizeof(message));
+    MsgBytesCount =0;
+    MsgWroteBytes=0;
 
-    count = read(fd, &message, sizeof(message));
-    if (count < 1) {
-			printf("Error. Connection has been terminated by the other end. Closing.. \n");
-			close(fd);
-			exit(1);
-		}
+    while (MsgWroteBytes < 12) {
+        MsgBytesCount = write(fd, &message+MsgWroteBytes, sizeof(message)-MsgWroteBytes);
+        MsgWroteBytes += MsgBytesCount;
+    }
+
+    MsgReadBytes =0;
+    MsgBytesCount =0;
+
+    while (MsgReadBytes <12) {
+        MsgBytesCount= read(fd, &message+MsgReadBytes, sizeof(message)-MsgReadBytes);
+        if (MsgBytesCount < 1) {
+            printf("Error. Connection has been terminated by the other end. Closing.. \n");
+            close(fd);
+            exit(1);
+        }
+        MsgReadBytes += MsgBytesCount;
+    }
 
 	message.length = ntohl(message.length);
 
@@ -242,12 +297,17 @@ void LS(char *Command, char *FileName){
 		exit(1);
 	}
 
-    printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
+    //printf("|Mesasge| count:%d protocol:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
-    TotalBytes = message.length-count;
+    TotalBytes = message.length-12;
 
     while (ReadBytes < TotalBytes){
         count = read(fd, Payload+ReadBytes, TotalBytes-ReadBytes);
+		if (count < 1) {
+			printf("Error. Connection has been terminated by the other end. Closing.. \n");
+			close(fd);
+			exit(1);
+		}
         ReadBytes +=count;
     }
 
@@ -262,10 +322,10 @@ void LS(char *Command, char *FileName){
 
 void Get(char *Command, char *FileName){
     int count;
-    int TotalBytes;
-    int ReadBytes =0;
-    int WroteBytes =0;
-    int FileSize;
+    unsigned int TotalBytes;
+    unsigned int ReadBytes =0;
+    unsigned int WroteBytes =0;
+    unsigned int FileSize;
     FILE* Output;
     //char* Payload;
     strcpy(Payload,"");
@@ -283,7 +343,13 @@ void Get(char *Command, char *FileName){
 
     message.length = htonl(message.length);
 
-    write(fd, &message, sizeof(message));
+    MsgBytesCount =0;
+    MsgWroteBytes=0;
+
+    while (MsgWroteBytes < 12) {
+        MsgBytesCount = write(fd, &message+MsgWroteBytes, sizeof(message)-MsgWroteBytes);
+        MsgWroteBytes += MsgBytesCount;
+    }
 
     TotalBytes = strlen(Payload)+1;
     WroteBytes = 0;
@@ -293,12 +359,18 @@ void Get(char *Command, char *FileName){
         WroteBytes += count;
     }
 
-    count = read(fd, &message, sizeof(message));
-    if (count < 1) {
-			printf("Error. Connection has been terminated by the other end. Closing.. \n");
-			close(fd);
-			exit(1);
-	}
+    MsgReadBytes =0;
+    MsgBytesCount =0;
+
+    while (MsgReadBytes <12) {
+        MsgBytesCount= read(fd, &message+MsgReadBytes, sizeof(message)-MsgReadBytes);
+        if (MsgBytesCount < 1) {
+            printf("Error. Connection has been terminated by the other end. Closing.. \n");
+            close(fd);
+            exit(1);
+        }
+        MsgReadBytes += MsgBytesCount;
+    }
 
 	message.length = ntohl(message.length);
 
@@ -307,7 +379,7 @@ void Get(char *Command, char *FileName){
 		exit(1);
 	}
 
-    printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
+    //printf("|Mesasge| count:%d protocol:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
     if (message.status){
         count = read(fd, &message, sizeof(message));
@@ -325,7 +397,7 @@ void Get(char *Command, char *FileName){
 			exit(1);
 		}
 
-        printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
+        //printf("|Mesasge| count:%d protocol:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
         FileSize = message.length-12;
 
@@ -439,7 +511,13 @@ void Put(char *Command, char *FileName){
             message.length = 12 +strlen(PureFilename)+1;
             message.length = htonl(message.length);
 
-            write(fd, &message, sizeof(message));
+            MsgBytesCount =0;
+            MsgWroteBytes=0;
+
+            while (MsgWroteBytes < 12) {
+                MsgBytesCount = write(fd, &message+MsgWroteBytes, sizeof(message)-MsgWroteBytes);
+                MsgWroteBytes += MsgBytesCount;
+            }
 
             strcpy(Payload,PureFilename);
 
@@ -451,12 +529,18 @@ void Put(char *Command, char *FileName){
                 WroteBytes += count;
             }
 
-            count = read(fd, &message, sizeof(message));
-			if (count < 1) {
-				printf("Error. Connection has been terminated by the other end. Closing.. \n");
-				close(fd);
-				exit(1);
-			}
+            MsgReadBytes =0;
+            MsgBytesCount =0;
+
+            while (MsgReadBytes <12) {
+                MsgBytesCount= read(fd, &message+MsgReadBytes, sizeof(message)-MsgReadBytes);
+                if (MsgBytesCount < 1) {
+                    printf("Error. Connection has been terminated by the other end. Closing.. \n");
+                    close(fd);
+                    exit(1);
+                }
+                MsgReadBytes += MsgBytesCount;
+            }
 
 			message.length = ntohl(message.length);
 
@@ -476,7 +560,14 @@ void Put(char *Command, char *FileName){
             message.length = 12+FileSize;
             message.length = htonl(message.length);
 
-            write(fd, &message, sizeof(message));
+            MsgBytesCount =0;
+            MsgWroteBytes=0;
+
+            while (MsgWroteBytes < 12) {
+                MsgBytesCount = write(fd, &message+MsgWroteBytes, sizeof(message)-MsgWroteBytes);
+                MsgWroteBytes += MsgBytesCount;
+            }
+
             strcpy(Payload,"");
             fseek(File, 0, SEEK_SET);
 
@@ -484,7 +575,7 @@ void Put(char *Command, char *FileName){
 
             TotalBytes = FileSize;
 
-            printf("Total: %d Filesize: %d\n", FileSize,FileSize);
+            //printf("Filesize: %d\n", FileSize);
 
             WroteBytes = 0;
 
@@ -516,14 +607,26 @@ void Quit(){
 
     message.length = htonl(message.length);
 
-    send(fd, &message, sizeof(message), 0);
-    count = recv(fd, &message, sizeof(message), 0);
+    MsgBytesCount =0;
+    MsgWroteBytes=0;
 
-	if (count < 1) {
-		printf("Error. Connection has been terminated by the other end. Closing.. \n");
-		close(fd);
-		exit(1);
-	}
+    while (MsgWroteBytes < 12) {
+        MsgBytesCount = write(fd, &message+MsgWroteBytes, sizeof(message)-MsgWroteBytes);
+        MsgWroteBytes += MsgBytesCount;
+    }
+
+    MsgReadBytes =0;
+    MsgBytesCount =0;
+
+    while (MsgReadBytes <12) {
+        MsgBytesCount= read(fd, &message+MsgReadBytes, sizeof(message)-MsgReadBytes);
+        if (MsgBytesCount < 1) {
+            printf("Error. Connection has been terminated by the other end. Closing.. \n");
+            close(fd);
+            exit(1);
+        }
+        MsgReadBytes += MsgBytesCount;
+    }
 
 	message.length = ntohl(message.length);
 
@@ -532,7 +635,7 @@ void Quit(){
 		exit(1);
 	}
 
-    printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
+    //printf("|Mesasge| count:%d protocol:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
     printf("Thank you.\n");
 
