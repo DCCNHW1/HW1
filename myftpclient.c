@@ -62,10 +62,6 @@ struct message_s message;
 bool IsValid(struct message_s message, unsigned int msg_type){
 	unsigned char stdprot[6] = {0xe3, 'm', 'y', 'f', 't', 'p'};
 	int i;
-	if (message.type != msg_type){
-		printf("Invalid message: type mismatch. Closing..\n");
-		return false;
-	}
 	for (i = 0; i < 6; i++)
 		if (message.protocol[i] != stdprot[i]){ //Validate protocol header
 			printf("Invalid Message: invalid protocol header. Closing..\n");
@@ -78,6 +74,10 @@ bool IsValid(struct message_s message, unsigned int msg_type){
 	}
 	if (message.length < 12 || message.length > INT_MAX) {
 		printf("Invalid Message: invalid message length field. Closing..\n");
+		return false;
+	}
+	if (message.type != msg_type){
+		printf("Invalid message: type mismatch. Closing..\n");
 		return false;
 	}
 	if ( ((message.type == OPEN_CONN_REPLY) || (message.type == AUTH_REPLY) || (message.type == GET_REPLY) ||

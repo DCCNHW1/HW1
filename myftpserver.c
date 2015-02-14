@@ -214,12 +214,6 @@ bool Authentication(int accept_fd){
     //Payload = malloc(sizeof(char)*INT_MAX);
 
     count = read(accept_fd, &message, sizeof(message));
-	if (message.type != AUTH_REQUEST) {
-		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
-		close(accept_fd);
-		connection_count--;
-		pthread_exit();
-	}
 	
 	if (count < 1) {
 		printf("Error. Connection has been terminated by the other end. Closing.. \n");
@@ -236,6 +230,12 @@ bool Authentication(int accept_fd){
 		pthread_exit();
 	}
 
+	if (message.type != AUTH_REQUEST) {
+		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
+		close(accept_fd);
+		connection_count--;
+		pthread_exit();
+	}
     printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
     TotalBytes = message.length-count;
 
@@ -581,12 +581,7 @@ void Put(int accept_fd, unsigned int length){
     write(accept_fd, &message, sizeof(message));
 
     count = read(accept_fd, &message, sizeof(message));
-	if (message.type != FILE_DATA) {
-		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
-		close(accept_fd);
-		connection_count--;
-		pthread_exit();
-	}
+	
 	if (count < 1) {
 			printf("Error. Connection has been terminated by the other end. Closing.. \n");
 			close(accept_fd);
@@ -600,6 +595,13 @@ void Put(int accept_fd, unsigned int length){
 	if (!IsValid(message)) {
 		close(accept_fd);
 		free(Payload);
+		connection_count--;
+		pthread_exit();
+	}
+	
+	if (message.type != FILE_DATA) {
+		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
+		close(accept_fd);
 		connection_count--;
 		pthread_exit();
 	}
@@ -761,13 +763,6 @@ void *Client(void *client_data_sp){
 	count = read(accept_fd, &message, sizeof(message));
 
 	/*Check the message*/
-	if (message.type != OPEN_CONN_REQUEST) {
-		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
-		close(accept_fd);
-		connection_count--;
-		pthread_exit();
-	}
-	
 	if (count < 1) {
 			printf("Error. Connection has been terminated by the other end. Closing.. \n");
 			close(accept_fd);
@@ -783,6 +778,12 @@ void *Client(void *client_data_sp){
 		pthread_exit();
 	}
 
+	if (message.type != OPEN_CONN_REQUEST) {
+		printf("Invalid Message: invalid protocol message type. Connection terminated.\n");
+		close(accept_fd);
+		connection_count--;
+		pthread_exit();
+	}
 
 	printf("count:%d proto:%s type:%u status:%u length:%d\n",count,message.protocol, message.type, message.status, message.length);
 
