@@ -86,6 +86,16 @@ bool IsValid(struct message_s message, unsigned int msg_type){
 		printf("Invalid Message: invalid message length field. Closing..\n");
 		return false;
 	}
+	if ((message.type == OPEN_CONN_REPLY) && (message.status != 1)){
+		printf("Invalid Message: invalid message status field. Closing..\n");
+		return false;
+	}
+	if (((message.type == AUTH_REPLY) || (message.type == GET_REPLY)) 
+		&& (message.status != 1) && (message.status != 0)){
+		printf("Invalid Message: invalid message status field. Closing..\n");
+		return false;
+	}
+	
 	return true;
 }
 
@@ -248,6 +258,11 @@ void LS(char *Command, char *FileName){
 
     while (ReadBytes < TotalBytes){
         count = read(fd, Payload+ReadBytes, TotalBytes-ReadBytes);
+		if (count < 1) {
+			printf("Error. Connection has been terminated by the other end. Closing.. \n");
+			close(fd);
+			exit(1);
+		}
         ReadBytes +=count;
     }
 
